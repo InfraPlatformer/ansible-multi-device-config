@@ -1,0 +1,13 @@
+project structure 
+
+/ansible-multi-device-config  
+├── playbooks/  
+│   └── deploy_configs.yml    # Your main YAML file  
+├── inventory/  
+│   ├── hosts.ini            # Device groups (Cisco)  
+│   └── host_vars/           # Device-specific vars (optional)  
+├── roles/                   # From Ansible Galaxy  
+│   ├── cisco_ntp/           # Example: `ansible-galaxy install author.role`  
+│   └── juniper_vlans/  
+├── README.md                # Docs + usage  
+└── requirements.txt         # Dependencies (ansible>=2.14)  
