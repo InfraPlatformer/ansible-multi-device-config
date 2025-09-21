@@ -1,0 +1,201 @@
+name: Code Quality and Cleanup
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10, 3.11]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8 mypy pytest pytest-cov safety bandit isort
+        pip install -r requirements.txt || true
+    
+    - name: Lint with flake8
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+    
+    - name: Check code formatting with black
+      run: |
+        black --check --diff .
+    
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff .
+    
+    - name: Type check with mypy
+      run: |
+        mypy . --ignore-missing-imports || true
+    
+    - name: Security check with bandit
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+    
+    - name: Check for outdated dependencies
+      run: |
+        safety check --json --output safety-report.json || true
+    
+    - name: Run tests with pytest
+      run: |
+        pytest --cov=. --cov-report=xml --cov-report=html || true
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: matrix.python-version == '3.11'
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  bash-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install shellcheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+    
+    - name: Run shellcheck
+      run: |
+        find . -name "*.sh" -type f -exec shellcheck {} \;
+    
+    - name: Install shfmt
+      run: |
+        go install mvdan.cc/sh/v3/cmd/shfmt@latest
+        echo "$HOME/go/bin" >> $GITHUB_PATH
+    
+    - name: Check Bash formatting
+      run: |
+        find . -name "*.sh" -type f -exec shfmt -d {} \;
+
+  ansible-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Ansible and tools
+      run: |
+        pip install ansible ansible-lint yamllint
+    
+    - name: Run ansible-lint
+      run: |
+        ansible-lint . || true
+    
+    - name: Run yamllint
+      run: |
+        yamllint . || true
+
+  terraform-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+    
+    - name: Terraform Format Check
+      run: |
+        terraform fmt -check -recursive
+    
+    - name: Install tflint
+      run: |
+        curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+    
+    - name: Run tflint
+      run: |
+        tflint --init
+        tflint
+
+  docker-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install hadolint
+      run: |
+        curl -L https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o hadolint
+        chmod +x hadolint
+        sudo mv hadolint /usr/local/bin/
+    
+    - name: Run hadolint
+      run: |
+        find . -name "Dockerfile*" -type f -exec hadolint {} \;
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  dependency-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Update Python dependencies
+      run: |
+        pip install pip-tools
+        pip-compile --upgrade requirements.in || true
+        pip-sync requirements.txt || true
+    
+    - name: Update Node.js dependencies
+      run: |
+        if [ -f package.json ]; then
+          npm update
+        fi
+    
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update dependencies'
+        title: 'chore: update dependencies'
+        body: |
+          This PR updates dependencies to their latest versions.
+          
+          - Updated Python packages
+          - Updated Node.js packages
+          - Security patches applied
+        branch: dependency-updates
+        delete-branch: true
