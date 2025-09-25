@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Main reverse engineering lab
+  re-lab:
+    build: .
+    container_name: reverse-engineering-lab
+    volumes:
+      - ../:/workspace/lab
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"  # Jupyter notebook
+      - "8080:8080"  # Web services
+      - "5000:5000"  # Flask apps
+      - "3000:3000"  # Additional services
+    environment:
+      - PYTHONPATH=/workspace
+      - GOPATH=/workspace/go
+    working_dir: /workspace
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+  # Python analysis environment
+  python-lab:
+    build: .
+    container_name: python-re-lab
+    volumes:
+      - ../python-lab:/workspace/python-lab
+    ports:
+      - "8001:8000"
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace/python-lab
+    command: jupyter notebook --ip=0.0.0.0 --port=8000 --no-browser --allow-root
+
+  # Go analysis environment
+  go-lab:
+    build: .
+    container_name: go-re-lab
+    volumes:
+      - ../go-lab:/workspace/go-lab
+    ports:
+      - "8002:8000"
+    environment:
+      - GOPATH=/workspace/go
+    working_dir: /workspace/go-lab
+    command: /bin/bash
+
+  # Cloud analysis environment
+  cloud-lab:
+    build: .
+    container_name: cloud-re-lab
+    volumes:
+      - ../cloud-lab:/workspace/cloud-lab
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8003:8000"
+    environment:
+      - PYTHONPATH=/workspace
+    working_dir: /workspace/cloud-lab
+    command: /bin/bash
+
+  # Database for practice
+  postgres:
+    image: postgres:15
+    container_name: re-postgres
+    environment:
+      - POSTGRES_DB=reverse_engineering
+      - POSTGRES_USER=reuser
+      - POSTGRES_PASSWORD=repass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis for caching
+  redis:
+    image: redis:7
+    container_name: re-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
